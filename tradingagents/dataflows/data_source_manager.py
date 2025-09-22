@@ -27,6 +27,7 @@ class ChinaDataSource(Enum):
     AKSHARE = "akshare"
     BAOSTOCK = "baostock"
     TDX = "tdx"  # 中国股票数据，将被逐步淘汰
+    RICEQUANT = "ricequant"
 
 
 
@@ -55,7 +56,8 @@ class DataSourceManager:
             'tushare': ChinaDataSource.TUSHARE,
             'akshare': ChinaDataSource.AKSHARE,
             'baostock': ChinaDataSource.BAOSTOCK,
-            'tdx': ChinaDataSource.TDX
+            'tdx': ChinaDataSource.TDX,
+            'ricequant': ChinaDataSource.RICEQUANT
         }
 
         return source_mapping.get(env_source, ChinaDataSource.AKSHARE)
@@ -227,6 +229,14 @@ class DataSourceManager:
             logger.warning(f"⚠️ TDX数据源可用 (将被淘汰)")
         except ImportError:
             logger.info(f"ℹ️ TDX数据源不可用: 库未安装")
+
+        # 检查ricequant
+        token = os.getenv('RICEQUANT_USERNAME')
+        if token:
+            available.append(ChinaDataSource.RICEQUANT)
+            logger.info("✅ ricequant数据源可用")
+        else:
+            logger.warning("⚠️ ricequant数据源不可用: 未设置RICEQUANT_USERNAME")
         
         return available
     
@@ -254,6 +264,8 @@ class DataSourceManager:
             return self._get_baostock_adapter()
         elif self.current_source == ChinaDataSource.TDX:
             return self._get_tdx_adapter()
+        elif self.current_source == ChinaDataSource.RICEQUANT:
+            return self._get_rqdata_adapter()
         else:
             raise ValueError(f"不支持的数据源: {self.current_source}")
     
@@ -283,7 +295,7 @@ class DataSourceManager:
         except ImportError as e:
             logger.error(f"❌ BaoStock适配器导入失败: {e}")
             return None
-    
+
     def _get_tdx_adapter(self):
         """获取TDX适配器 (已弃用)"""
         logger.warning(f"⚠️ 警告: TDX数据源已弃用，建议使用Tushare")
@@ -293,7 +305,16 @@ class DataSourceManager:
         except ImportError as e:
             logger.error(f"❌ TDX适配器导入失败: {e}")
             return None
-    
+
+    def _get_rqdata_adapter(self):
+        """获取米筐金融数据适配器 (已弃用)"""
+        try:
+            from .rqdata_utils import get_rqdata_provider
+            return get_rqdata_provider()
+        except ImportError as e:
+            logger.error(f"❌ 米筐金融数据适配器导入失败: {e}")
+            return None
+
     def get_stock_data(self, symbol: str, start_date: str = None, end_date: str = None) -> str:
         """
         获取股票数据的统一接口
@@ -335,6 +356,8 @@ class DataSourceManager:
                 result = self._get_baostock_data(symbol, start_date, end_date)
             elif self.current_source == ChinaDataSource.TDX:
                 result = self._get_tdx_data(symbol, start_date, end_date)
+            elif self.current_source == ChinaDataSource.RICEQUANT:
+                result = self._get_ricequant_data(symbol, start_date, end_date)
             else:
                 result = f"❌ 不支持的数据源: {self.current_source.value}"
 
@@ -551,7 +574,63 @@ class DataSourceManager:
         logger.warning(f"⚠️ 警告: 正在使用已弃用的TDX数据源")
         from .tdx_utils import get_china_stock_data
         return get_china_stock_data(symbol, start_date, end_date)
-    
+
+    def _get_ricequant_data(self, symbol: str, start_date: str, end_date: str) -> str:
+        """使用米筐金融数据接口"""
+        logger.debug(f"📊 [RiceQuant] 调用参数: symbol={symbol}, start_date={start_date}, end_date={end_date}")
+
+        start_time = time.time()
+        try:
+            # 这里需要实现AKShare的统一接口
+            from .rqdata_utils import get_rqdata_provider
+            provider = get_rqdata_provider()
+            data = provider.get_stock_data(symbol, start_date, end_date)
+
+            duration = time.time() - start_time
+
+            if data is not None and not data.empty:
+                result = f"股票代码: {symbol}\n"
+                result += f"数据期间: {start_date} 至 {end_date}\n"
+                result += f"数据条数: {len(data)}条\n\n"
+
+                # 显示最新3天数据，确保在各种显示环境下都能完整显示
+                display_rows = min(3, len(data))
+                result += f"最新{display_rows}天数据:\n"
+
+                # 使用pandas选项确保显示完整数据
+                with pd.option_context('display.max_rows', None,
+                                       'display.max_columns', None,
+                                       'display.width', None,
+                                       'display.max_colwidth', None):
+                    result += data.tail(display_rows).to_string(index=False)
+
+                # 如果数据超过3天，也显示一些统计信息
+                if len(data) > 3:
+                    latest_price = data.iloc[-1]['close']
+                    first_price = data.iloc[0]['close']
+                    try:
+                        change = float(latest_price) - float(first_price)
+                        change_pct = (change / float(first_price)) * 100
+                        result += f"\n\n📊 期间统计:\n"
+                        result += f"期间涨跌: {change:+.2f} ({change_pct:+.2f}%)\n"
+                        result += f"最高价: {data['high'].max()}\n"
+                        result += f"最低价: {data['low'].min()}\n"
+                    except (ValueError, TypeError):
+                        pass
+
+                logger.debug(
+                    f"📊 [RiceQuant] 调用成功: 耗时={duration:.2f}s, 数据条数={len(data)}, 结果长度={len(result)}")
+                return result
+            else:
+                result = f"❌ 未能获取{symbol}的股票数据"
+                logger.warning(f"⚠️ [RiceQuant] 数据为空: 耗时={duration:.2f}s")
+                return result
+
+        except Exception as e:
+            duration = time.time() - start_time
+            logger.error(f"❌ [RiceQuant] 调用失败: {e}, 耗时={duration:.2f}s", exc_info=True)
+            return f"❌ RiceQuant获取{symbol}数据失败: {e}"
+
     def _get_volume_safely(self, data) -> float:
         """安全地获取成交量数据，支持多种列名"""
         try:

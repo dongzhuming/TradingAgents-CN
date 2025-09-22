@@ -9,6 +9,7 @@ import time
 import random
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
+
 from .cache_manager import get_cache
 from .config import get_config
 
@@ -175,7 +176,7 @@ class OptimizedChinaDataProvider:
             self.cache.save_fundamentals_data(
                 symbol=symbol,
                 fundamentals_data=fundamentals_data,
-                data_source="tdx_analysis"
+                data_source="analysis"
             )
             
             logger.info(f"✅ A股基本面数据生成成功: {symbol}")
@@ -261,13 +262,13 @@ class OptimizedChinaDataProvider:
         logger.debug(f"🔍 [股票代码追踪] _get_industry_info 返回结果: {industry_info}")
 
         logger.debug(f"🔍 [股票代码追踪] 调用 _estimate_financial_metrics，传入参数: '{symbol}'")
-        financial_estimates = self._estimate_financial_metrics(symbol, current_price)
+        # financial_estimates = self._estimate_financial_metrics(symbol, current_price)
+        financial_estimates = self._get_ricequant_financial_metrics(symbol)
         logger.debug(f"🔍 [股票代码追踪] _estimate_financial_metrics 返回结果: {financial_estimates}")
 
         logger.debug(f"🔍 [股票代码追踪] 开始生成报告，使用股票代码: '{symbol}'")
         
         # 检查数据来源并生成相应说明
-        data_source_note = ""
         data_source = financial_estimates.get('data_source', '')
         
         if any("（估算值）" in str(v) for v in financial_estimates.values() if isinstance(v, str)):
@@ -276,6 +277,8 @@ class OptimizedChinaDataProvider:
             data_source_note = "\n✅ **数据说明**: 财务指标基于AKShare真实财务数据计算"
         elif data_source == "Tushare":
             data_source_note = "\n✅ **数据说明**: 财务指标基于Tushare真实财务数据计算"
+        elif data_source == "ricequant":
+            data_source_note = "\n✅ **数据说明**: 财务指标基于米筐金融数据真实财务数据计算"
         else:
             data_source_note = "\n✅ **数据说明**: 财务指标基于真实财务数据计算"
         
@@ -482,6 +485,59 @@ class OptimizedChinaDataProvider:
         
         return estimated_metrics
 
+    def _get_ricequant_financial_metrics(self, symbol: str) -> dict | None:
+        """获取米筐财务指标"""
+        try:
+            from .rqdata_utils import get_rqdata_provider
+            rqdata_provider = get_rqdata_provider()
+            current_date = datetime.now().date()
+            previous_trading_date = rqdata_provider.get_previous_trading_date(current_date.strftime('%Y-%m-%d'))
+            if not previous_trading_date:
+                logger.error('调用前交易日接口报错，使用当前日期替代')
+                previous_trading_date = current_date.strftime('%Y-%m-%d')
+            if rqdata_provider.connected:
+                data = rqdata_provider.get_financial_data(symbol, previous_trading_date)
+                mapping = {
+                            'pe_ratio_ttm': 'pe',                       # 市盈率（TTM）
+                            'pb_ratio_ttm': 'pb',                       # 市净率（TTM）
+                            'ps_ratio_ttm': 'ps',                       # 市销率（TTM）
+                            'dividend_yield_ttm': 'dividend_yield',     # 股息率（TTM）
+                            'return_on_equity_ttm': 'roe',              # 净资产收益率（ROE，TTM）
+                            'return_on_asset_ttm': 'roa',               # 总资产收益率（ROA，TTM）
+                            'gross_profit_margin_ttm': 'gross_margin',  # 毛利率（TTM）
+                            'net_profit_margin_ttm': 'net_margin',      # 净利率（TTM）
+                            'debt_to_asset_ratio_ttm': 'debt_ratio',    # 资产负债率（TTM）
+                            'current_ratio_ttm': 'current_ratio',       # 流动比率（TTM）
+                            'quick_ratio_ttm': 'quick_ratio',           # 速动比率（TTM）
+                            'cash_ratio_ttm': 'cash_ratio'              # 现金比率（TTM）
+                        }
+                metrics = {mapping.get(k, k): v for k, v in data.items()}
+                # 评分（基于AKShare数据的简化评分）
+                fundamental_score = self._calculate_fundamental_score(metrics, {})
+                # valuation_score = self._calculate_valuation_score(metrics)
+                valuation_score = 5.0
+                # growth_score = self._calculate_growth_score(metrics, stock_info)
+                growth_score = 6.0
+                # risk_level = self._calculate_risk_level(metrics, stock_info)
+                risk_level = '中等'
+
+                metrics.update({
+                    "fundamental_score": fundamental_score,
+                    "valuation_score": valuation_score,
+                    "growth_score": growth_score,
+                    "risk_level": risk_level,
+                    "data_source": "ricequant"
+                })
+
+                logger.info(f"✅ AKShare财务数据解析成功: PE={metrics['pe']}, PB={metrics['pb']}, ROE={metrics['roe']}")
+                return metrics
+
+        except Exception as e:
+            logger.debug(f"获取{symbol}真实财务数据失败: {e}")
+
+        return None
+
+
     def _get_real_financial_metrics(self, symbol: str, price_value: float) -> dict:
         """获取真实财务指标 - 优先使用AKShare"""
         try:
@@ -532,7 +588,7 @@ class OptimizedChinaDataProvider:
             stock_info = provider.get_stock_info(symbol)
             
             # 解析Tushare财务数据
-            metrics = self._parse_financial_data(financial_data, stock_info, price_value)
+            metrics = self._parse_tushare_financial_data(financial_data, stock_info, price_value)
             if metrics:
                 return metrics
                 
@@ -717,7 +773,7 @@ class OptimizedChinaDataProvider:
             logger.error(f"❌ AKShare财务数据解析失败: {e}")
             return None
 
-    def _parse_financial_data(self, financial_data: dict, stock_info: dict, price_value: float) -> dict:
+    def _parse_tushare_financial_data(self, financial_data: dict, stock_info: dict, price_value: float) -> dict:
         """解析财务数据为指标"""
         try:
             # 获取最新的财务数据
