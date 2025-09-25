@@ -529,7 +529,7 @@ class OptimizedChinaDataProvider:
                     "data_source": "ricequant"
                 })
 
-                logger.info(f"✅ AKShare财务数据解析成功: PE={metrics['pe']}, PB={metrics['pb']}, ROE={metrics['roe']}")
+                logger.info(f"✅ RiceQuant财务数据解析成功: PE={metrics['pe']}, PB={metrics['pb']}, ROE={metrics['roe']}")
                 return metrics
 
         except Exception as e:

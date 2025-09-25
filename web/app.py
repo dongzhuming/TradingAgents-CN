@@ -1360,32 +1360,32 @@ def main():
                             st.session_state.analysis_running = False
                             logger.info(f"📊 [结果同步] 恢复分析结果: {current_analysis_id}")
 
-                            # 自动保存分析结果到历史记录
-                            try:
-                                from components.analysis_results import save_analysis_result
-                                
-                                # 从进度数据中获取分析参数
-                                stock_symbol = progress_data.get('stock_symbol', st.session_state.get('last_stock_symbol', 'unknown'))
-                                analysts = progress_data.get('analysts', [])
-                                research_depth = progress_data.get('research_depth', 3)
-                                
-                                # 保存分析结果
-                                save_success = save_analysis_result(
-                                    analysis_id=current_analysis_id,
-                                    stock_symbol=stock_symbol,
-                                    analysts=analysts,
-                                    research_depth=research_depth,
-                                    result_data=raw_results,
-                                    status="completed"
-                                )
-                                
-                                if save_success:
-                                    logger.info(f"💾 [结果保存] 分析结果已保存到历史记录: {current_analysis_id}")
-                                else:
-                                    logger.warning(f"⚠️ [结果保存] 保存失败: {current_analysis_id}")
-                                    
-                            except Exception as save_error:
-                                logger.error(f"❌ [结果保存] 保存异常: {save_error}")
+                            # # 自动保存分析结果到历史记录
+                            # try:
+                            #     from components.analysis_results import save_analysis_result
+                            #
+                            #     # 从进度数据中获取分析参数
+                            #     stock_symbol = progress_data.get('stock_symbol', st.session_state.get('last_stock_symbol', 'unknown'))
+                            #     analysts = progress_data.get('analysts', [])
+                            #     research_depth = progress_data.get('research_depth', 3)
+                            #
+                            #     # 保存分析结果
+                            #     save_success = save_analysis_result(
+                            #         analysis_id=current_analysis_id,
+                            #         stock_symbol=stock_symbol,
+                            #         analysts=analysts,
+                            #         research_depth=research_depth,
+                            #         result_data=raw_results,
+                            #         status="completed"
+                            #     )
+                            #
+                            #     if save_success:
+                            #         logger.info(f"💾 [结果保存] 分析结果已保存到历史记录: {current_analysis_id}")
+                            #     else:
+                            #         logger.warning(f"⚠️ [结果保存] 保存失败: {current_analysis_id}")
+                            #
+                            # except Exception as save_error:
+                            #     logger.error(f"❌ [结果保存] 保存异常: {save_error}")
 
                             # 检查是否已经刷新过，避免重复刷新
                             refresh_key = f"results_refreshed_{current_analysis_id}"
