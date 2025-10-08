@@ -18,9 +18,9 @@ warnings.filterwarnings('ignore')
 
 class RqDataProvider:
 
-    """AKShare数据提供器"""
+    """米筐金融数据提供器"""
     def __init__(self):
-        """初始化AKShare提供器"""
+        """初始化米筐金融提供器"""
         try:
             self.connected = False
             self.auth_url = 'https://rqdata.ricequant.com/auth'

@@ -581,17 +581,21 @@ class DataSourceManager:
 
         start_time = time.time()
         try:
-            # 这里需要实现AKShare的统一接口
             from .rqdata_utils import get_rqdata_provider
             provider = get_rqdata_provider()
             data = provider.get_stock_data(symbol, start_date, end_date)
-
+            info = provider.get_stock_info(symbol)
             duration = time.time() - start_time
 
             if data is not None and not data.empty:
-                result = f"股票代码: {symbol}\n"
+                result = f"股票名称: {info['name']}\n"
                 result += f"数据期间: {start_date} 至 {end_date}\n"
                 result += f"数据条数: {len(data)}条\n\n"
+                result += f"期间最高: ¥{data['high'].max():.2f}\n"
+                result += f"期间最低: ¥{data['low'].min():.2f}\n"
+                result += f"当前价格: ¥{data.iloc[-1]['close']}\n"
+                result += f"涨跌幅: {(data.iloc[-1]['close'] / data.iloc[-2]['close'] - 1) * 100:.3f}%\n"
+                result += f"成交量: {data.iloc[-1]['volume']:.0f}手\n"
 
                 # 显示最新3天数据，确保在各种显示环境下都能完整显示
                 display_rows = min(3, len(data))

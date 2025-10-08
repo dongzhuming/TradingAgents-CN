@@ -1,43 +1,44 @@
-from tradingagents.graph.trading_graph import TradingAgentsGraph
-from tradingagents.default_config import DEFAULT_CONFIG
+from datetime import datetime
+import json, time, redis
+from typing import Dict, Any, Optional, Union
+from web.utils.analysis_runner import run_stock_analysis
+from tradingagents.config.database_manager import get_database_manager
 
-from web.utils.mongodb_report_manager import MongoDBReportManager
+r = get_database_manager().get_redis_client()
+# 模拟Web界面的进度更新函数
+progress_messages = []
 
-# 导入日志模块
-from tradingagents.utils.logging_manager import get_logger
-logger = get_logger('default')
+TASK_QUEUE = "TRADING_AGENTS:TASK_QUEUE"
 
-stock_code = "600988"
-report_date = "2025-09-22"
-analysts = ["market", "social", "news", "fundamentals"]
+def mock_update_progress(message, current=None, total=None):
+    progress_messages.append(message)
+    if current and total:
+        print(f"📊 进度 {current}/{total}: {message}")
+    else:
+        print(f"📊 {message}")
 
-# Create a custom config
-config = DEFAULT_CONFIG.copy()
-config["llm_provider"] = "deepseek"  # Use a different model
-config["backend_url"] = "https://api.deepseek.com"  # Use a different backend
-config["deep_think_llm"] = "deepseek-chat"  # Use a different model
-config["quick_think_llm"] = "deepseek-chat"  # Use a different model
-config["max_debate_rounds"] = 1  # Increase debate rounds
-config["online_tools"] = True  # Increase debate rounds
+def stock_analysis(params: Dict[str, Any]) -> Dict[str, Any]:
+    return run_stock_analysis(**params)
 
-# Initialize with custom config
-ta = TradingAgentsGraph(debug=True, config=config)
+def worker_loop():
+    print("[Worker] 等待任务...")
+    while True:
+        try:
+            task_data = r.brpop([TASK_QUEUE], timeout=5)  # 阻塞式读取
+            if task_data:
+                _, task_json = task_data
+                task = json.loads(task_json)
+                if 'task_id' in task:
+                    task_id = task['task_id']
+                else:
+                    print("task_id is missing")
+                    continue
+                stock_analysis(task['params'])
+        except redis.exceptions.TimeoutError:
+            print("任务队列监听中...")
+        except Exception as e:
+            print(f"[Worker] 出错: {e}")
+            time.sleep(5)
 
-# forward propagate
-final_state, decision = ta.propagate(stock_code, "2025-09-22")
-# ['messages', 'company_of_interest', 'trade_date', 'sender', 'market_report', 'sentiment_report', 'news_report', 'fundamentals_report', 'investment_debate_state', 'investment_plan', 'trader_investment_plan', 'risk_debate_state', 'final_trade_decision']
-
-analysis_results = {"summary": "",
-                    "analysts": analysts,
-                    "research_depth": 1}
-messages = final_state.pop("messages", None)
-
-"""显示报告详细信息（调试用）"""
-mongodb_manager = MongoDBReportManager()
-if mongodb_manager.connected:
-    result = mongodb_manager.save_analysis_report(stock_code, analysis_results, final_state)
-
-# print(decision)
-
-# Memorize mistakes and reflect
-# ta.reflect_and_remember(1000) # parameter is the position returns
+if __name__ == '__main__':
+    worker_loop()

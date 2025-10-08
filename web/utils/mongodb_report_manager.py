@@ -122,7 +122,7 @@ class MongoDBReportManager:
             document = {
                 "analysis_id": analysis_id,
                 "stock_symbol": stock_symbol,
-                "analysis_date": timestamp.strftime('%Y-%m-%d'),
+                "analysis_date": analysis_results.get("analysis_date"),
                 "timestamp": timestamp,
                 "status": "completed",
                 "source": "mongodb",

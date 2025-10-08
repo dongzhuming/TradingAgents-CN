@@ -885,6 +885,7 @@ def main():
     if os.getenv('DEBUG_MODE') == 'true':
         if st.button("🔄 清除会话状态"):
             st.session_state.clear()
+            print("------------------------------------")
             st.experimental_rerun()
 
     # 渲染页面头部
@@ -908,7 +909,6 @@ def main():
         ["📊 股票分析", "⚙️ 配置管理", "💾 缓存管理", "💰 Token统计", "📋 操作日志", "📈 分析结果", "🔧 系统状态"],
         label_visibility="collapsed"
     )
-    
     # 记录页面访问活动
     try:
         user_activity_logger.log_page_visit(
@@ -1080,6 +1080,7 @@ def main():
         cleanup_dead_analysis_threads()
 
         st.sidebar.success("✅ 分析状态已清理")
+        print("------------------------------------")
         st.rerun()
 
     # 在侧边栏底部添加退出按钮
@@ -1302,6 +1303,7 @@ def main():
 
                 # 等待2秒让用户看到启动信息，然后刷新页面
                 time.sleep(2)
+                print("------------------------------------")
                 st.rerun()
 
         # 2. 股票分析区域（只有在有分析ID时才显示）
@@ -1394,6 +1396,7 @@ def main():
                                 st.success("📊 分析结果已恢复并保存，正在刷新页面...")
                                 # 使用st.rerun()代替meta refresh，保持侧边栏状态
                                 time.sleep(1)
+                                print("------------------------------------")
                                 st.rerun()
                             else:
                                 # 已经刷新过，不再刷新
@@ -1408,6 +1411,7 @@ def main():
 
                 # 使用st.rerun()代替meta refresh，保持侧边栏状态
                 time.sleep(1)
+                print("------------------------------------")
                 st.rerun()
 
 
